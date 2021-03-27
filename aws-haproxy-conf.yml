@@ -1,0 +1,80 @@
+- hosts: 127.0.0.1
+  vars_files:
+  - aws-credentials.yml
+  tasks:
+  - amazon.aws.ec2:
+      key_name: hadoop
+      instance_type: t2.micro
+      image: ami-068d43a544160b7ef
+      group_id: sg-0974db000fe8e8d7a
+      count: 2
+      region: ap-south-1
+      instance_tags:
+       env: webserver
+      vpc_subnet_id: subnet-4404012c
+      assign_public_ip: yes
+      aws_access_key: "{{ ACCESS_KEY  }}"
+      aws_secret_key: "{{ SECRET_KEY  }}"
+      state: present
+    register: mywebserver
+       
+  - add_host:
+        hostname: "{{ item.public_ip }}"
+        groupname: webservers
+    loop: "{{ mywebserver.instances }}" 
+  
+  - delegate_to: "{{ item.public_ip }}"
+    wait_for_connection:
+        delay: 60
+        timeout: 320
+    loop: "{{ mywebserver.instances }}"
+
+  - amazon.aws.ec2:
+      key_name: hadoop
+      instance_type: t2.micro
+      image: ami-068d43a544160b7ef
+      group_id: sg-0974db000fe8e8d7a
+      count: 1
+      region: ap-south-1
+      instance_tags:
+       env: lb
+      vpc_subnet_id: subnet-4404012c
+      assign_public_ip: yes
+      aws_access_key: "{{ ACCESS_KEY  }}"
+      aws_secret_key: "{{ SECRET_KEY  }}"
+      state: present
+    register: mylb
+    
+  - add_host:
+        hostname: "{{ item.public_ip }}"
+        groupname: loadbalancer
+    loop: "{{ mylb.instances }}"
+    
+  - delegate_to: "{{ item.public_ip }}"
+    wait_for_connection:
+        delay: 60
+        timeout: 320
+    loop: "{{ mylb.instances }}"
+
+- hosts: loadbalancer
+  tasks:
+        - package:
+           name: "haproxy"
+        - template:
+           dest: "/etc/haproxy/haproxy.cfg"
+           src: "haproxy.cfg"
+        - service:
+           name: "haproxy"
+           state: restarted
+
+- hosts: webservers
+  tasks:
+        - package:
+           name: "httpd"
+        - copy:
+           dest: "/var/www/html/index.html"
+           content: "this is test lb web page"
+        - service:
+           name: "httpd"
+           state: restarted
+
