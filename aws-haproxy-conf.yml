@@ -73,7 +73,7 @@
            name: "httpd"
         - copy:
            dest: "/var/www/html/index.html"
-           content: "this is test lb web page"
+           src: index.html
         - service:
            name: "httpd"
            state: restarted
